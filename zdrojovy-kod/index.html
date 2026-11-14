@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFC most</title>
+<style>
+  :root {
+    --bg: #f6f3fc; --card: #ffffff; --text: #1d1a24; --muted: #6e6680; --line: #e3dcf2;
+    --accent: #8d6fd6; --accent-soft: #ece5fb; --accent-text: #ffffff;
+    --ok: #2f9e6a; --ok-soft: #e2f4ea; --warn: #d9821f; --warn-soft: #fbefdf; --bad: #c8475b; --bad-soft: #f9e3e7;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15121b; --card: #1f1a28; --text: #f1edf8; --muted: #a49bb5; --line: #33294a;
+      --accent: #b39cf0; --accent-soft: #2c2440; --accent-text: #15121b;
+      --ok-soft: #173326; --warn-soft: #3a2a14; --bad-soft: #3a1a21; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; }
+  h1 small { font-size: 13px; color: var(--muted); font-weight: 500; margin-left: 6px; }
+  h2 { font-size: 15px; margin: 0 0 14px; }
+  h3 { font-size: 13px; margin: 18px 0 8px; color: var(--muted); font-weight: 600; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line); font-size: 13px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; min-width: 0; }
+  .card + .card { margin-top: 16px; }
+  .muted { color: var(--muted); } .small { font-size: 13px; }
+  [hidden] { display: none !important; }
+
+  /* přiložená karta */
+  .tap { text-align: center; padding: 8px 0 4px; transition: opacity .3s; }
+  .tap.gone { opacity: .5; }
+  .uid { font: 600 26px/1.3 var(--mono); letter-spacing: .04em; word-break: break-all; margin: 4px 0; }
+  .flash { animation: flash .7s ease; }
+  @keyframes flash { from { box-shadow: 0 0 0 6px var(--accent-soft); border-color: var(--accent); } }
+  .meter { height: 6px; border-radius: 3px; background: var(--accent-soft); overflow: hidden; margin: 8px 0 2px; }
+  .meter > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  .meter.over > div { background: var(--bad); }
+  .records { list-style: none; padding: 0; margin: 14px 0 0; text-align: left; }
+  .records li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-top: 8px; overflow-wrap: anywhere; }
+  .records .kind { font-size: 12px; color: var(--muted); display: block; }
+  .records a { color: var(--accent); }
+  .badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); white-space: nowrap; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); }
+
+  /* formuláře */
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+  input[type=checkbox] { width: auto; margin: 0; accent-color: var(--accent); }
+  textarea { resize: vertical; min-height: 64px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .rec { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin-bottom: 10px; }
+  .rec-head { display: flex; gap: 8px; align-items: center; }
+  .rec-head select { flex: 1; }
+  .row { display: flex; gap: 8px; align-items: center; } .row > .grow { flex: 1; min-width: 0; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 14px; margin-top: 12px; color: var(--text); cursor: pointer; }
+  button { font: inherit; border-radius: 8px; padding: 7px 14px; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent-soft); color: var(--text); white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; min-width: 170px; }
+  button.ghost { border-color: var(--line); background: transparent; }
+  button.danger { border-color: var(--bad); background: transparent; color: var(--bad); }
+  button.icon { padding: 4px 10px; border-color: var(--line); background: transparent; color: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .presets select { flex: 1; min-width: 140px; }
+  .notice { border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
+  .notice.ok { background: var(--ok-soft); } .notice.bad { background: var(--bad-soft); } .notice.warn { background: var(--warn-soft); }
+  .pending { text-align: center; padding: 18px 12px; border-radius: 12px; margin-top: 12px;
+    background: var(--warn-soft); border: 1px dashed var(--warn); }
+  .pending strong { display: block; font-size: 17px; margin-bottom: 2px; }
+  .pulse { width: 14px; height: 14px; border-radius: 50%; background: var(--warn); margin: 0 auto 8px; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { transform: scale(1.5); opacity: .4; } }
+  details { margin-top: 14px; } summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  pre { font: 12px/1.45 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+  ul.list { list-style: none; padding: 0; margin: 0; }
+  ul.list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0;
+    border-bottom: 1px solid var(--line); font-size: 13px; }
+  ul.list li:last-child { border-bottom: 0; }
+  ul.list code { font-family: var(--mono); overflow-wrap: anywhere; min-width: 0; }
+  ul.list span.time { color: var(--muted); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>NFC most <small id="ver"></small></h1>
+    <div class="pills">
+      <span class="pill"><span class="dot" id="dotWs"></span><span id="txtWs">Připojuji…</span></span>
+      <span class="pill"><span class="dot" id="dotReader"></span><span id="txtReader">Čtečka: ?</span></span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div>
+      <section class="card" id="tapCard">
+        <h2>Přiložená karta</h2>
+        <div class="tap" id="tap">
+          <div class="uid" id="uid">—</div>
+          <div class="muted small" id="ctype">Přilož kartu nebo tag ke čtečce.</div>
+          <div id="ndefBox" hidden>
+            <div class="meter" id="usedMeter"><div></div></div>
+            <div class="muted small" id="usedText"></div>
+            <ul class="records" id="recList"></ul>
+          </div>
+          <div class="actions" style="justify-content:center">
+            <button class="ghost" id="copyUid" disabled>Kopírovat UID</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Historie</h2>
+        <ul class="list" id="log"><li class="muted">Zatím nic.</li></ul>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <h2>Zápis na tag</h2>
+        <div class="presets">
+          <select id="presetSel" aria-label="Preset"><option value="">Presety…</option></select>
+          <button class="ghost" id="presetDel" disabled title="Smazat vybraný preset">Smazat</button>
+          <div class="row" style="flex-basis:100%">
+            <input class="grow" id="presetName" placeholder="Název presetu" aria-label="Název presetu" maxlength="60">
+            <button class="ghost" id="presetSave">Uložit preset</button>
+          </div>
+        </div>
+
+        <div id="recForms"></div>
+        <div class="actions"><button class="ghost" id="addRec">+ Přidat záznam</button></div>
+
+        <div class="meter" id="sizeMeter" hidden><div></div></div>
+        <div class="muted small" id="sizeText" style="margin-top:12px">Vyplň, co se má zapsat.</div>
+
+        <label class="check"><input type="checkbox" id="series"> Zapisovat automaticky na každý přiložený tag</label>
+
+        <div class="actions">
+          <button class="primary" id="writeBtn" disabled>Přilož tag</button>
+        </div>
+        <div class="notice bad" id="reason" hidden></div>
+        <div class="pending" id="pending" hidden>
+          <div class="pulse"></div>
+          <strong>Přilož tag ke čtečce</strong>
+          <span class="muted small" id="pendingText"></span>
+          <div class="actions" style="justify-content:center"><button class="ghost" id="cancelBtn">Zrušit</button></div>
+        </div>
+        <div class="notice" id="writeNote" hidden></div>
+
+        <details>
+          <summary>JSON pro tvůj web</summary>
+          <p class="small muted">Tuhle zprávu pošle web přes WebSocket a most zapíše tag:</p>
+          <pre id="jsonOut"></pre>
+          <button class="ghost" id="copyJson">Kopírovat JSON</button>
+        </details>
+      </section>
+
+      <section class="card">
+        <h2>Nastavení</h2>
+        <h3 style="margin-top:0">Weby s přístupem ke čtečce</h3>
+        <p class="small muted" style="margin-top:0">Když se k mostu poprvé připojí nový web, most se zeptá, jestli mu přístup povolit.
+          Odebraný web se při příštím připojení zeptá znovu.</p>
+        <ul class="list" id="sites"></ul>
+
+        <h3>Data</h3>
+        <div class="actions" style="margin-top:0">
+          <button class="ghost" id="openFolder">Otevřít složku</button>
+          <button class="ghost" id="exportBtn">Exportovat (zip)</button>
+        </div>
+        <div class="actions">
+          <button class="danger" id="delPresets">Smazat presety</button>
+          <button class="danger" id="delLogs">Smazat záznam událostí</button>
+          <button class="danger" id="delAll">Smazat vše a ukončit most</button>
+        </div>
+        <p class="small muted" id="cfgInfo" style="margin-bottom:0"></p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+const show = (id, on) => { $(id).hidden = !on; };
+
+const LANGS = [["cs", "čeština"], ["sk", "slovenština"], ["en", "angličtina"], ["de", "němčina"], ["pl", "polština"]];
+const KINDS = { text: "Text", url: "Odkaz (URL)", tel: "Telefon", email: "E-mail", sms: "SMS" };
+
+let ws = null, connected = false, lastUid = "", reqId = 0;
+let tag = null;          // tag, který právě leží na čtečce
+let lastSize = null;     // velikost dat k zápisu v bajtech (z mostu)
+let job = null;          // probíhající zápis
+let countdown = null;
+let lastWritten = { uid: "", at: 0 };
+
+// ---------- spojení s mostem ----------
+function connect() {
+  ws = new WebSocket("ws://" + location.host + "/ws");
+  ws.onopen = () => { connected = true; setPill("Ws", "ok", "Spojeno s mostem"); measure(); };
+  ws.onclose = () => {
+    connected = false; tag = null;
+    setPill("Ws", "bad", "Most neběží");
+    setPill("Reader", "", "Čtečka: ?");
+    if (job) endJob();
+    updateWrite();
+    setTimeout(connect, 2000);
+  };
+  ws.onmessage = (e) => handle(JSON.parse(e.data));
+}
+const send = (o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+
+function setPill(which, cls, text) { $("dot" + which).className = "dot " + cls; $("txt" + which).textContent = text; }
+
+function handle(m) {
+  switch (m.type) {
+    case "hello": $("ver").textContent = "v" + m.version; break;
+    case "reader":
+      if (m.connected) setPill("Reader", "ok", "Čtečka: " + m.reader);
+      else { setPill("Reader", "warn", "Čtečka nepřipojena"); tag = null; updateWrite(); }
+      break;
+    case "card":
+      tag = { uid: m.uid, cardType: m.cardType, ndef: m.ndef || null };
+      showCard(m, !m.initial);
+      updateWrite();
+      if (m.initial) break; // karta už ležela na čtečce při připojení
+      // série: zapsat na každý nově přiložený tag (ne znovu na ten, na který se právě zapsalo)
+      if ($("series").checked && !job && !writeBlock() && !(m.uid === lastWritten.uid && Date.now() - lastWritten.at < 4000)) startWrite();
+      break;
+    case "removed":
+      $("tap").classList.add("gone");
+      tag = null; updateWrite();
+      break;
+    case "error": addLog("Chyba: " + m.message, m.time); break;
+    case "measure-result": lastSize = m.ok ? m.bytes : null; sizeError = m.ok ? "" : m.message; updateWrite(); break;
+    case "write-pending": if (job && m.id === job.id) startPending(m); break;
+    case "write-result": if (job && m.id === job.id) writeDone(m); break;
+  }
+}
+
+// ---------- přiložená karta ----------
+function describeRecord(r) {
+  switch (r.type) {
+    case "url": {
+      const u = r.url || "";
+      const kind = u.startsWith("tel:") ? "Telefon" : u.startsWith("mailto:") ? "E-mail" : u.startsWith("sms:") ? "SMS" : "Odkaz";
+      const node = /^https?:\/\//i.test(u) ? el("a", { href: u, target: "_blank", rel: "noopener", textContent: u }) : document.createTextNode(u);
+      return [kind, node];
+    }
+    case "text": return ["Text" + (r.lang ? " (" + r.lang + ")" : ""), document.createTextNode(r.text)];
+    case "mime": return ["MIME " + r.mimeType, document.createTextNode(r.text ?? ("[" + atob(r.data || "").length + " B dat]"))];
+    case "aar": return ["Android aplikace", document.createTextNode(r.package)];
+    case "empty": return ["Prázdný záznam", document.createTextNode("—")];
+    default: return ["Neznámý záznam" + (r.recordType ? " " + r.recordType : ""), document.createTextNode("")];
+  }
+}
+
+function showCard(m, withLog = true) {
+  lastUid = m.uid;
+  $("tap").classList.remove("gone");
+  $("uid").textContent = m.uid;
+  $("ctype").textContent = m.cardType || "neznámý typ karty";
+  $("copyUid").disabled = false;
+  const card = $("tapCard"); card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+
+  const n = m.ndef, list = $("recList");
+  list.replaceChildren();
+  show("ndefBox", !!n);
+  if (n && n.formatted) {
+    $("usedMeter").firstElementChild.style.width = Math.min(100, (n.used / n.capacity) * 100) + "%";
+    $("usedText").textContent = n.records.length ? `Obsazeno ${n.used} z ${n.capacity} B` : `Prázdný tag · ${n.capacity} B`;
+    if (n.locked) $("usedText").append(" ", el("span", { className: "badge bad", textContent: "zamčený" }));
+    if (n.protected) $("usedText").append(" ", el("span", { className: "badge bad", textContent: "chráněný heslem" }));
+    for (const r of n.records) {
+      const [kind, node] = describeRecord(r);
+      list.append(el("li", {}, el("span", { className: "kind", textContent: kind }), node));
+    }
+    if (n.error) list.append(el("li", { className: "muted", textContent: n.error }));
+  } else if (n) {
+    $("usedMeter").firstElementChild.style.width = "0";
+    $("usedText").textContent = n.error || "Tag není naformátovaný pro NDEF.";
+  }
+  const summary = n && n.records && n.records.length ? "  · " + n.records.map(r => r.url || r.text || r.mimeType || r.type).join(", ") : "";
+  if (withLog) addLog(m.uid + summary, m.time);
+}
+
+function addLog(text, time) {
+  const log = $("log");
+  if (log.firstElementChild && log.firstElementChild.classList.contains("muted")) log.replaceChildren();
+  log.prepend(el("li", {}, el("code", { textContent: text }),
+    el("span", { className: "time", textContent: new Date(time || Date.now()).toLocaleTimeString("cs-CZ") })));
+  while (log.children.length > 30) log.lastElementChild.remove();
+}
+
+// ---------- formulář zápisu ----------
+function field(labelText, input) {
+  input.id = "f" + Math.random().toString(36).slice(2, 8);
+  return [el("label", { htmlFor: input.id, textContent: labelText }), input];
+}
+
+function addRecordForm(kind = "text", values = {}) {
+  const box = el("div", { className: "rec" });
+  const sel = el("select"); sel.setAttribute("aria-label", "Typ záznamu");
+  for (const [k, v] of Object.entries(KINDS)) sel.append(el("option", { value: k, textContent: v }));
+  sel.value = KINDS[kind] ? kind : "text";
+  const del = el("button", { className: "icon", title: "Odebrat záznam", textContent: "✕" });
+  const body = el("div");
+  box.append(el("div", { className: "rec-head" }, sel, del), body);
+
+  const render = (vals = {}) => {
+    body.replaceChildren();
+    box.dataset.kind = sel.value;
+    const inp = (name, attrs) => { const i = el("input", attrs); i.dataset.name = name; i.value = vals[name] || ""; return i; };
+    const area = (name, attrs) => { const i = el("textarea", attrs); i.dataset.name = name; i.value = vals[name] || ""; return i; };
+    switch (sel.value) {
+      case "text": {
+        const lang = el("select"); lang.dataset.name = "lang";
+        for (const [k, v] of LANGS) lang.append(el("option", { value: k, textContent: v }));
+        if (vals.lang) lang.value = vals.lang;
+        body.append(...field("Text", area("text", { rows: 3, placeholder: "např. Členská karta č. 7" })), ...field("Jazyk", lang));
+        break;
+      }
+      case "url": body.append(...field("Adresa", inp("url", { type: "url", placeholder: "https://muj-web.cz/prukaz/…" }))); break;
+      case "tel": body.append(...field("Telefonní číslo", inp("tel", { type: "tel", placeholder: "+420 123 456 789" }))); break;
+      case "email":
+        body.append(...field("E-mailová adresa", inp("to", { type: "email", placeholder: "info@muj-web.cz" })),
+          ...field("Předmět (nepovinné)", inp("subject", {})), ...field("Text zprávy (nepovinné)", area("body", { rows: 2 })));
+        break;
+      case "sms":
+        body.append(...field("Telefonní číslo", inp("tel", { type: "tel", placeholder: "+420 123 456 789" })),
+          ...field("Text zprávy (nepovinné)", area("body", { rows: 2 })));
+        break;
+    }
+    changed();
+  };
+  sel.onchange = () => render();
+  del.onclick = () => { box.remove(); if (!$("recForms").children.length) addRecordForm(); changed(); };
+  box.oninput = changed;
+  $("recForms").append(box);
+  render(values);
+}
+
+// položky formuláře (ukládají se do presetů)
+function collectItems() {
+  return [...$("recForms").children].map(box => {
+    const item = { kind: box.dataset.kind };
+    box.querySelectorAll("[data-name]").forEach(i => { if (i.value !== "") item[i.dataset.name] = i.value; });
+    return item;
+  });
+}
+function loadItems(items) {
+  $("recForms").replaceChildren();
+  (items.length ? items : [{ kind: "url" }]).forEach(it => addRecordForm(it.kind, it));
+}
+
+// převod položek na NDEF záznamy pro most
+function collectRecords() {
+  const recs = [];
+  const clean = (t) => (t || "").replace(/[\s()-]/g, "");
+  for (const it of collectItems()) {
+    switch (it.kind) {
+      case "text": if ((it.text || "").trim()) recs.push({ type: "text", text: it.text, lang: it.lang || "cs" }); break;
+      case "url": { let u = (it.url || "").trim(); if (u) { if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = "https://" + u; recs.push({ type: "url", url: u }); } break; }
+      case "tel": if (clean(it.tel)) recs.push({ type: "url", url: "tel:" + clean(it.tel) }); break;
+      case "email": {
+        const to = (it.to || "").trim(); if (!to) break;
+        const q = new URLSearchParams();
+        if (it.subject) q.set("subject", it.subject); if (it.body) q.set("body", it.body);
+        const qs = q.toString().replace(/\+/g, "%20");
+        recs.push({ type: "url", url: "mailto:" + to + (qs ? "?" + qs : "") }); break;
+      }
+      case "sms": if (clean(it.tel)) recs.push({ type: "url", url: "sms:" + clean(it.tel) + (it.body ? "?body=" + encodeURIComponent(it.body) : "") }); break;
+    }
+  }
+  return recs;
+}
+
+let measureTimer = null, sizeError = "";
+function changed() {
+  $("jsonOut").textContent = JSON.stringify({ type: "write", id: "zapis-1", records: collectRecords() }, null, 2);
+  clearTimeout(measureTimer);
+  measureTimer = setTimeout(measure, 150);
+}
+function measure() {
+  const recs = collectRecords();
+  if (!recs.length) { lastSize = null; sizeError = ""; updateWrite(); return; }
+  send({ type: "measure", id: "m" + (++reqId), records: recs });
+}
+
+// Proč nejde zapsat na přiložený tag (null = jde to).
+function writeBlock() {
+  if (!tag || lastSize == null) return null;
+  const n = tag.ndef;
+  if (!n) return `Tenhle typ karty (${tag.cardType || "neznámý"}) neumím zapisovat. Použij tag NTAG213, NTAG215 nebo NTAG216.`;
+  if (!n.formatted) return "Tag není naformátovaný pro NDEF, takže na něj nejde zapsat.";
+  if (n.locked) return "Tag je natrvalo zamčený proti zápisu.";
+  if (n.protected) return "Tag je chráněný heslem. Zápis na chráněné tagy zatím most neumí.";
+  if (lastSize > n.capacity) return `Data se nevejdou: potřeba ${lastSize} B, na tagu je místo jen pro ${n.capacity} B.`;
+  return null;
+}
+
+function updateWrite() {
+  const btn = $("writeBtn"), meter = $("sizeMeter"), txt = $("sizeText");
+  const block = writeBlock();
+  // velikost dat
+  if (sizeError) txt.textContent = sizeError;
+  else if (lastSize == null) txt.textContent = "Vyplň, co se má zapsat.";
+  else if (tag && tag.ndef && tag.ndef.formatted) txt.textContent = `${lastSize} z ${tag.ndef.capacity} B na přiloženém tagu`;
+  else txt.textContent = `Data k zápisu: ${lastSize} B`;
+  const cap = tag && tag.ndef && tag.ndef.formatted ? tag.ndef.capacity : 0;
+  meter.hidden = !(cap && lastSize != null);
+  if (cap && lastSize != null) {
+    meter.classList.toggle("over", lastSize > cap);
+    meter.firstElementChild.style.width = Math.min(100, (lastSize / cap) * 100) + "%";
+  }
+  // tlačítko
+  if (!connected) { btn.textContent = "Most neběží"; btn.disabled = true; }
+  else if (job) { btn.textContent = "Zapisuji…"; btn.disabled = true; }
+  else if (lastSize == null) { btn.textContent = "Zapsat na tag"; btn.disabled = true; }
+  else if (!tag) { btn.textContent = "Přilož tag"; btn.disabled = true; }
+  else { btn.textContent = "Zapsat na tag"; btn.disabled = !!block; }
+  $("reason").textContent = block || "";
+  show("reason", !!block && !job);
+}
+
+// ---------- průběh zápisu ----------
+function note(cls, text) { const n = $("writeNote"); n.className = "notice " + cls; n.textContent = text; n.hidden = false; }
+
+function startWrite() {
+  const recs = collectRecords();
+  if (!recs.length) return;
+  job = { id: "z" + (++reqId) };
+  $("writeNote").hidden = true;
+  send({ type: "write", id: job.id, records: recs, timeout: 30 });
+  updateWrite();
+}
+$("writeBtn").onclick = startWrite;
+$("cancelBtn").onclick = () => job && send({ type: "cancel", id: job.id });
+
+function startPending(m) {
+  // Tag leží na čtečce → zápis proběhne hned, výzvu ukážeme jen když se čeká.
+  setTimeout(() => {
+    if (!job || job.id !== m.id) return;
+    show("pending", true);
+    let left = 30;
+    const tick = () => { $("pendingText").textContent = `${m.bytes} B · zbývá ${left} s`; left--; };
+    tick(); clearInterval(countdown); countdown = setInterval(tick, 1000);
+  }, 300);
+}
+function endJob() {
+  clearInterval(countdown);
+  show("pending", false);
+  job = null;
+  updateWrite();
+}
+function writeDone(m) {
+  endJob();
+  if (m.ok) {
+    lastWritten = { uid: m.uid, at: Date.now() };
+    note("ok", `Zapsáno na ${m.uid} · ${m.bytes} z ${m.capacity} B`);
+    addLog("Zapsáno na " + m.uid, m.time);
+    if (m.ndef) { tag = { uid: m.uid, cardType: m.cardType, ndef: m.ndef }; showCard(m, false); updateWrite(); }
+  } else if (m.code === "cancelled") note("warn", "Zápis zrušen.");
+  else note("bad", m.message || "Zápis se nepovedl.");
+}
+
+// ---------- presety ----------
+let presets = [];
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) } });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.message || "HTTP " + r.status);
+  return data;
+}
+async function loadPresets() {
+  try { renderPresets(await api("/presets")); } catch {}
+}
+function renderPresets(list) {
+  presets = list;
+  const sel = $("presetSel"), current = sel.value;
+  sel.replaceChildren(el("option", { value: "", textContent: list.length ? "Presety…" : "Žádné presety" }));
+  for (const p of list) sel.append(el("option", { value: p.name, textContent: p.name }));
+  sel.value = list.some(p => p.name === current) ? current : "";
+  $("presetDel").disabled = !sel.value;
+}
+$("presetSel").onchange = () => {
+  const p = presets.find(p => p.name === $("presetSel").value);
+  $("presetDel").disabled = !p;
+  if (!p) return;
+  loadItems(p.items);
+  $("presetName").value = p.name;
+};
+$("presetSave").onclick = async () => {
+  const name = $("presetName").value.trim();
+  if (!name) { $("presetName").focus(); return; }
+  if (presets.some(p => p.name === name) && !confirm(`Preset „${name}“ už existuje. Přepsat?`)) return;
+  try {
+    renderPresets(await api("/presets", { method: "POST", body: JSON.stringify({ name, items: collectItems() }) }));
+    $("presetSel").value = name; $("presetDel").disabled = false;
+    addLog("Preset uložen: " + name);
+  } catch (e) { alert("Preset se nepodařilo uložit: " + e.message); }
+};
+$("presetDel").onclick = async () => {
+  const name = $("presetSel").value;
+  if (!name || !confirm(`Smazat preset „${name}“?`)) return;
+  try { renderPresets(await api("/presets?name=" + encodeURIComponent(name), { method: "DELETE" })); }
+  catch (e) { alert("Preset se nepodařilo smazat: " + e.message); }
+};
+// když někdo nahraje presety do složky, načtou se při návratu na stránku
+window.addEventListener("focus", loadPresets);
+
+// ---------- nastavení ----------
+async function loadConfig() {
+  try {
+    const c = await api("/config");
+    renderSites(c.allowed, c.denied);
+    $("cfgInfo").textContent = `Port ${c.port}${c.demo ? " · DEMO režim" : ""} · data: ${c.dir}`;
+  } catch { $("cfgInfo").textContent = "Nastavení se nepodařilo načíst."; }
+}
+function renderSites(allowed, denied) {
+  const ul = $("sites");
+  ul.replaceChildren();
+  const row = (origin, ok) => {
+    const btn = el("button", { className: "icon", textContent: "Odebrat" });
+    btn.onclick = async () => {
+      try { const r = await api("/sites/forget", { method: "POST", body: JSON.stringify({ origin }) }); renderSites(r.allowed, r.denied); }
+      catch (e) { alert(e.message); }
+    };
+    const label = origin === "null" ? "stránka ze souboru (file://)" : origin;
+    ul.append(el("li", {}, el("code", { textContent: label }),
+      el("span", { className: "row" }, el("span", { className: "badge " + (ok ? "ok" : "bad"), textContent: ok ? "povoleno" : "zamítnuto" }), btn)));
+  };
+  allowed.forEach(o => row(o, true));
+  denied.forEach(o => row(o, false));
+  if (!ul.children.length) ul.append(el("li", { className: "muted", textContent: "Zatím se nepřipojil žádný web." }));
+}
+
+$("openFolder").onclick = () => api("/data/open-folder", { method: "POST" }).catch(e => alert(e.message));
+$("exportBtn").onclick = () => { location.href = "/export.zip"; };
+$("delPresets").onclick = async () => {
+  if (!confirm("Smazat všechny presety?")) return;
+  try { await api("/data/delete", { method: "POST", body: JSON.stringify({ what: "presets" }) }); loadPresets(); addLog("Presety smazány"); }
+  catch (e) { alert(e.message); }
+};
+$("delLogs").onclick = async () => {
+  if (!confirm("Smazat záznam událostí?")) return;
+  try { await api("/data/delete", { method: "POST", body: JSON.stringify({ what: "logs" }) }); addLog("Záznam událostí smazán"); }
+  catch (e) { alert(e.message); }
+};
+$("delAll").onclick = async () => {
+  if (!confirm("Smazat všechna data (presety, záznam událostí, povolené weby) včetně složky a ukončit NFC most?")) return;
+  try {
+    await api("/data/delete", { method: "POST", body: JSON.stringify({ what: "all" }) });
+    document.body.replaceChildren(el("main", {}, el("section", { className: "card" },
+      el("h2", { textContent: "Data smazána" }),
+      el("p", { className: "muted", textContent: "NFC most se ukončil. Tuhle stránku můžeš zavřít." }))));
+  } catch (e) { alert(e.message); }
+};
+
+// ---------- drobnosti ----------
+async function copy(text, btn) {
+  try { await navigator.clipboard.writeText(text); const t = btn.textContent; btn.textContent = "Zkopírováno ✓"; setTimeout(() => btn.textContent = t, 1200); } catch {}
+}
+$("copyUid").onclick = (e) => copy(lastUid, e.target);
+$("copyJson").onclick = (e) => copy($("jsonOut").textContent, e.target);
+$("addRec").onclick = () => addRecordForm("url");
+
+addRecordForm("url");
+loadPresets();
+loadConfig();
+connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+JAK PŘIDAT NFC ČTEČKU DO APLIKACE OD AI BUILDERU
+================================================
+
+1) Dej AI builderu soubor NFC-MOST.md
+   - Kde to jde, nahraj ho jako „knowledge“, „instructions“, „rules“ nebo „skill“
+     (podle toho, jak tomu platforma říká).
+   - Kde to nejde, vlož celý jeho obsah do chatu spolu s promptem níže.
+
+2) Napiš prompt, co chceš udělat. Například:
+
+----------------------------------------------------------------
+Podle návodu v NFC-MOST.md přidej do aplikace práci s NFC čtečkou přes NFC most.
+Použij přesně kód z návodu (nfc-bridge.js, v Reactu i useNfcReader.js).
+
+Chci:
+- U každého člena tlačítko „Přiřadit kartu“: aplikace počká na přiložení karty
+  a uloží její UID k členovi. Když UID už patří někomu jinému, upozorní.
+- Stránku „Výdej“: po přiložení karty se zobrazí jméno člena; neznámá karta
+  zobrazí varování.
+- U člena tlačítko „Zapsat průkaz na tag“: zapíše na tag odkaz
+  https://<adresa aplikace>/prukaz/<náhodný kód člena> a uloží UID tagu ke členovi.
+- Na stránkách s NFC ukaž štítek se stavem čtečky podle návodu.
+----------------------------------------------------------------
+
+Tip: Když AI vymyslí vlastní kód pro WebSocket nebo se připojuje jen na
+jeden port, připomeň jí: „Použij přesně nfc-bridge.js z NFC-MOST.md.“
